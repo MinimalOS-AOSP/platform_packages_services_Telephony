@@ -436,9 +436,41 @@ final class TelecomAccountRegistry {
         Phone[] phones = PhoneFactory.getPhones();
         Log.d(this, "Found %d phones.  Attempting to register.", phones.length);
         for (Phone phone : phones) {
-            long subscriptionId = phone.getSubId();
-            Log.d(this, "Phone with subscription id %d", subscriptionId);
-            if (subscriptionId >= 0) {
+            int provisionStatus = PROVISIONED;
+            int subscriptionId = phone.getSubId();
+
+            if (mTelephonyManager.getPhoneCount() > 1) {
+                SubscriptionInfo record =
+                        mSubscriptionManager.getActiveSubscriptionInfo(subscriptionId);
+
+                if (record == null) {
+                    Log.d(this, "Record not created for dummy subscription id %d", subscriptionId);
+                    continue;
+                }
+
+                int slotId = record.getSimSlotIndex();
+
+                try {
+                    //get current provision state of the SIM.
+                    provisionStatus =
+                            mExtTelephony.getCurrentUiccCardProvisioningStatus(slotId);
+                } catch (RemoteException ex) {
+                    provisionStatus = INVALID_STATE;
+                    Log.w(this, "Failed to get status for, slotId: "+ slotId +" Exception: " + ex);
+                } catch (NullPointerException ex) {
+                    provisionStatus = INVALID_STATE;
+                    Log.w(this, "Failed to get status for, slotId: "+ slotId +" Exception: " + ex);
+                }
+
+                if (provisionStatus == INVALID_STATE) {
+                    provisionStatus = PROVISIONED;
+                }
+
+                Log.d(this, "Phone with subscription id: " + subscriptionId +
+                                " slotId: " + slotId + " provisionStatus: " + provisionStatus);
+            }
+
+            if ((subscriptionId >= 0) && (provisionStatus == PROVISIONED)){
                 mAccounts.add(new AccountEntry(phone, false /* emergency */, false /* isDummy */));
             }
         }
